@@ -49,6 +49,7 @@ pub struct Interpreter<T, R> {
     stack: Vec<T>,
     map: HashMap<R, T>,
     prog_count: usize,
+    lp: (usize, usize),
 }
 impl<T, R> Interpreter<T, R> {
     fn new() -> Self {
@@ -56,9 +57,101 @@ impl<T, R> Interpreter<T, R> {
             stack: vec![],
             map: HashMap::new(),
             prog_count: 0,
+            lp: (0, 0),
         }
     }
-    fn interpret(&mut self) {}
+
+    fn set_lp_limit(&mut self, limit: usize) {
+        self.lp.0 = limit;
+    }
+    fn set_lp_current_iter(&mut self, current_iter: usize) {
+        self.lp.1 = current_iter;
+    }
+    fn get_lp_limit(&self) -> usize {
+        self.lp.0
+    }
+    fn get_lp_current_iter(&self) -> usize {
+        self.lp.1
+    }
+
+    fn interpret(&mut self, byte_code: &[ByteCode<T, R>]) -> Option<T>
+    where
+        T: std::fmt::Debug
+            + Default
+            + Add<Output = T>
+            + Div<Output = T>
+            + Mul<Output = T>
+            + Sub<Output = T>
+            + Copy
+            + Eq
+            + PartialEq,
+        R: std::fmt::Debug + Default + Eq + Hash + Copy,
+    {
+        let mut r = None;
+        while self.prog_count < byte_code.len() {
+            // Advance the program counter by
+            let mut adv_pc = 1;
+
+            match byte_code[self.prog_count].instruction {
+                Instruction::LOAD_VAL(val) => {
+                    // Put temp var into stack
+                    // println!("Stack in LOAD_VAL: {:?}\n", stack);
+                    self.stack.push(val);
+                }
+                Instruction::WRITE_VAR(key) => {
+                    // write to the lookup table from the stack
+                    let val = self.stack.pop().unwrap();
+                    self.map.insert(key, val);
+                    // println!("Map : {:?}", map);
+                }
+
+                Instruction::READ_VAR(key) => {
+                    // read from the map and push it to the stack
+                    let val = self.map.get(&key).unwrap();
+                    self.stack.push(val.clone());
+                }
+                Instruction::ADD => {
+                    // Perform Operation 'ADD'on 'a' and temp val in the stack
+                    // println!("Stack in ADD: {:?}\n", stack);
+                    if let Some((a, b)) = self.stack.pop().zip(self.stack.pop()) {
+                        self.stack.push(a + b);
+                    }
+                }
+                Instruction::MULTIPLY => {
+                    // Perform Operation 'MULTIPLY' on 'a' and temp val in the stack
+                    if let Some((a, b)) = self.stack.pop().zip(self.stack.pop()) {
+                        self.stack.push(a * b);
+                    }
+                }
+
+                Instruction::RETURN_VALUE => {
+                    r = self.stack.pop();
+                }
+                Instruction::LOOP(l) => {
+                    // map.insert(key, loop_limit);
+                    // println!("Stack in LOOP: {:?}\n", stack);
+                    self.set_lp_limit(l);
+                    self.set_lp_current_iter(0);
+                }
+                Instruction::JUMP(p_c) => {
+                    // println!("Stack in JUMP: {:?}\n", stack);
+                    self.prog_count = self.prog_count - p_c - 1;
+                    self.lp.1 += 1;
+                }
+                Instruction::IF_NOT_EQUAL => {
+                    // println!("Current : {:?}", current_iter);
+                    // println!("Stack : in IFNOT{:?}\n", stack);
+                    // println!("Map  : {:?}", map);
+                    if self.get_lp_limit() == self.get_lp_current_iter() {
+                        adv_pc = 2;
+                    }
+                }
+            }
+            self.prog_count += adv_pc;
+        }
+
+        r
+    }
 }
 fn interpreter<T, R>(byte_code: &[ByteCode<T, R>]) -> Option<T>
 // fn interpreter(byte_code: &[ByteCode<i32, &str>]) -> Option<i32>
