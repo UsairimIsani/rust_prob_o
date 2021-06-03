@@ -58,8 +58,7 @@ where
         + Mul<Output = T>
         + Sub<Output = T>
         + Copy
-        + Eq
-        + PartialEq,
+        + PartialOrd,
     R: std::fmt::Debug + Default + Eq + Hash + Copy,
 {
     pub fn new() -> Self {
@@ -96,19 +95,7 @@ where
         Vec::new()
     }
 
-    pub fn interpret(&mut self, byte_code: &[ByteCode<T, R>]) -> Option<T>
-    where
-        T: std::fmt::Debug
-            + Default
-            + Add<Output = T>
-            + Div<Output = T>
-            + Mul<Output = T>
-            + Sub<Output = T>
-            + Copy
-            + Eq
-            + PartialEq,
-        R: std::fmt::Debug + Default + Eq + Hash + Copy,
-    {
+    pub fn interpret(&mut self, byte_code: &[ByteCode<T, R>]) -> Option<T> {
         let mut r = None;
         while self.prog_count < byte_code.len() {
             // Advance the program counter by
@@ -158,7 +145,7 @@ where
                 Instruction::JUMP(p_c) => {
                     // println!("Stack in JUMP: {:?}\n", stack);
                     self.prog_count = self.prog_count - p_c - 1;
-                    self.lp.1 += 1;
+                    self.set_lp_current_iter(self.get_lp_current_iter() + 1);
                 }
                 Instruction::IF_NOT_EQUAL => {
                     // println!("Current : {:?}", current_iter);
@@ -278,5 +265,57 @@ mod tests {
         // println!("{:?}", r);
 
         assert_eq!(Some(10), r);
+    }
+
+    #[test]
+    fn loop_prog_with_other_types() {
+        #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
+        enum TestKeys {
+            A,
+            B,
+            C,
+            D,
+        }
+        impl Default for TestKeys {
+            fn default() -> Self {
+                TestKeys::A
+            }
+        }
+
+        let b_code: Vec<ByteCode<_, _>> = vec![
+            ByteCode {
+                instruction: Instruction::LOAD_VAL(2.0),
+            },
+            ByteCode {
+                instruction: Instruction::WRITE_VAR(TestKeys::B),
+            },
+            ByteCode {
+                instruction: Instruction::READ_VAR(TestKeys::B),
+            },
+            ByteCode {
+                instruction: Instruction::LOOP(3),
+            },
+            ByteCode {
+                instruction: Instruction::LOAD_VAL(2.0),
+            },
+            ByteCode {
+                instruction: Instruction::MULTIPLY,
+            },
+            ByteCode {
+                instruction: Instruction::IF_NOT_EQUAL,
+            },
+            ByteCode {
+                instruction: Instruction::JUMP(3),
+            },
+            ByteCode {
+                instruction: Instruction::RETURN_VALUE,
+            },
+        ];
+        let mut interpreter = Interpreter::new();
+        let r = interpreter.interpret(&b_code);
+
+        // println!("{:?}", r);
+
+        assert_eq!(Some(32.0), r);
     }
 }
